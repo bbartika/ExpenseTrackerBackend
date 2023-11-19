@@ -45,10 +45,19 @@ const getexpenses = (req, res)=> {
 
 const deleteexpense = (req, res) => {
     const expenseid = req.params.expenseid;
+    const expense = await.Expense.findByPk(id);
+    
     if(expenseid == undefined || expenseid.length === 0){
         return res.status(400).json({success: false, })
     }
-    Expense.destroy({where: { id: expenseid, userId: req.user.id }}).then((noofrows) => {
+    await User.update(
+        {
+            totalExpenses: req.user.totalExpenses - expense.amount,
+        },
+        { where: {id: req.user.id}}
+        );
+        
+        await Expense.destroy({where: { id: expenseid, userId: req.user.id }}).then((noofrows) => {
         if(noofrows === 0){
             return res.status(404).json({success: false, message: 'Expense doenst belong to the user'})
         }
