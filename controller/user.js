@@ -1,4 +1,3 @@
-
 const User = require('../models/users');
 const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
@@ -11,7 +10,7 @@ function isstringinvalid(string){
     }
 }
 
- const signup = async (req, res)=>{
+ const signup = async (req, res)=> {
     try{
     const { name, email, password } = req.body;
     console.log('email', email)
@@ -22,17 +21,20 @@ function isstringinvalid(string){
     bcrypt.hash(password, saltrounds, async (err, hash) => {
         console.log(err)
         await User.create({ name, email, password: hash })
-        res.status(201).json({message: 'Successfuly create new user'})
+        res.status(201).json({message: 'Successfully create new user'})
     })
-    }catch(err) {
+    }
+
+    catch(err) {
             res.status(500).json(err);
         }
 
 }
 
-const generateAccessToken = (id, name, ispremiumuser) => {
-    return jwt.sign({ userId : id, name: name, ispremiumuser } ,'secretkey');
+const generateAccessToken = (id, name,ispremiumuser) => {
+    return jwt.sign({ userId : id, name: name ,ispremiumuser} ,'secretkey');
 }
+
 
 const login = async (req, res) => {
     try{
@@ -48,7 +50,7 @@ const login = async (req, res) => {
             throw new Error('Something went wrong')
            }
             if(result === true){
-                return res.status(200).json({success: true, message: "User logged in successfully", token: generateAccessToken(user[0].id, user[0].name, user[0].ispremiumuser)})
+                return res.status(200).json({success: true, message: "User logged in successfully", token: generateAccessToken(user[0].id, user[0].name,user[0].ispremiumuser)})
             }
             else{
             return res.status(400).json({success: false, message: 'Password is incorrect'})
