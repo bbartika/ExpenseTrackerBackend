@@ -1,6 +1,7 @@
 const path = require('path');
 
 const express = require('express');
+
 var cors = require('cors')
 const sequelize = require('./util/database');
 const User = require('./models/users');
@@ -21,7 +22,7 @@ dotenv.config();
 
 app.use(cors());
 
-// app.use(bodyParser.urlencoded());  ////this is for handling forms
+//app.use(bodyParser.urlencoded());  ////this is for handling forms
 app.use(express.json());  //this is for handling jsons
 
 app.use('/user', userRoutes)
@@ -35,7 +36,7 @@ Expense.belongsTo(User);
 User.hasMany(Order);
 Order.belongsTo(User);
 
-sequelize.sync()
+sequelize.sync({force:true})
     .then(() => {
         app.listen(3000);
     })
