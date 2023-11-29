@@ -1,116 +1,130 @@
+const sib = require("sib-api-v3-sdk");
+const { v4: uuidv4 } = require('uuid');
+const bcrypt = require('bcrypt');
+require('dotenv').config();
 
- require mailer, UUID token and hashing libraries
- const Brevo = require('sib-api-v3-sdk');  //require('@getbrevo/brevo')
- const {v4:uuidv4} = require('uuid');       
- const bcrypt = require('bcrypt'); 
- const path = require('path');        
 
- const Resetpassword = require('../models/password-model');
- const User = require('../models/user-model')
+const User = require('../models/users');
+const Forgotpassword = require('../models/forgotpassword');
 
- require('dotenv').config();                       //access environment variables
- const brevoAPIKey = process.env.BREVO_API_KEY;
-
- //API to send mail for forgot password
- const forgotPasswordMail = async(req, res) =>{
-     try{
-         const user = await User.findOne({where:{email:req.body.email}});
+const forgotpassword = async (req, res) => {
+    try {
+        const { email } =  req.body;
+        const user = await User.findOne({where : { email }});
+        if(!user){
+            return res.status(404).json({error:'User not found'});
+        }
         
-         if(!user) return res.status(400).json({status:"Fail", message:"Email not found"});
+        const id = uuidv4();
+        user.createForgotpassword({ 
+            id: id, 
+            active: true 
+        });
 
-         const id = uuidv4();
-         Resetpassword.create({id, userId: user.id, active:true});
+        //creaate a Sendinblue email client
+        const defaultClient = sib.ApiClient.instance;
+        const apikey = defaultClient.authentications['api-key'];
+        apikey.apikey = process.env.SENDINBLUE_API_KEY;
+        const transEmailApi = new sib.TransactionalEmailsApi();
 
-         //create a brevo instance
-        const defaultClient = await Brevo.ApiClient.instance;
-         var apiKey = defaultClient.authentications['api-key']; //isapi-key an argument?
-         apiKey.apiKey = brevoAPIKey;
-         const transEmailApi = new Brevo.TransactionalEmailsApi();
+        const sender = {
+            email: "bartikabiswas.it.20183052@gmail.com",
+            name: "Bartika"
+        }
+        const receiver = [
+            {
+                email:{ email } 
+            }
+        ];
+        //Send the password reset email
+        await transEmailApi.sendTransacEmail({
+            sender,
+            to: receiver,
+            subject:"Password Reset",
+            html: `<a href="http://localhost:3000/password/resetpassword/${id}">Reset password</a>`,
+        });
 
-         await Promise.all([apiKey, transEmailApi]);
-
-         const path = `http://localhost:3000/password/forgotPassword/${id}`;
-
-       const sender = {
-       email: "arvidce@gmail.com",
-       name: "Code Keshri",
-       };
-       const receivers = [req.body];
-
-       await transEmailApi.sendTransacEmail({
-       sender,
-       to: receivers,
-       subject: "Reset Password",
-       textContent: "Click here to reset your password",
-       htmlContent: `<a href="${path}">Click Here</a> to reset your password!`,
-       });
-
-      res .status(200).json({ status: "Success", message: "Password reset email sent successfully!" });
-    
-     } catch (error) {
-        console.error(error)
-       }
-     
- };
-
-
-
-
-
- const createNewPassword = async(req, res) =>{
-
-   try{
-   const createPasswordUUID = await Resetpassword.findOne({where:{id: req.params.id}})
-  if(!createPasswordUUID)return res.status(400).json({status:"failed", message:"Invalid Link"})
-  
-   const passwordPath = path.join(__dirname,'..','views', 'password.html');
-   return res.status(200).sendFile(passwordPath);
-
-   }catch(err){
-     console.log(err)
-  }
-
- }
-
-
-
-
-
- const postNewPassword = async(req, res) =>{
-  const { id } = req.params;
-   const {password, confirmpassword} = req.body;      //can we get that id thru body too?  //is it necessary to check password and confirmpasswords are same here also, already have checked in frontend
-   const t = await sequelize.transaction();
-  
-   try{
-     const row = await Resetpassword.findOne({where:{id: id}}, {transaction: t});
-
-     if(!row.active){
-       await t.commit();
-      return res.status(400).send({status: "Failed", message: "Expired Link"});
-     }
-
-     const hashedPassword = bcrypt.hashSync(password, 10);
-
-     const updatedPassword = Resetpassword.update({active:false}, {where:{id:id}}, {transaction: t})
-
-     const updatedUser = User.update({password: hashedPassword}, {where:{id: row.userId}}, {transaction: t})
-
-     await Promise.all([updatedPassword, updatedUser]);
-     await t.commit();
-     res.status(200).send({status:"Success", message: "Password updated successfully"});
-
-   }catch(err){
-     t.rollback();
-     console.log(err);
-   }
-
-
- }
-
-   
- module.exports = {
-   forgotPasswordMail,
-   createNewPassword,
-   postNewPassword
+        res.status(200).json({ message: 'Link to reset password sent to your mail' });
+    } catch (err){
+        res.status(500).json({ error: err.message });
+    }       
 }
 
+
+const resetpassword = (req, res) => {
+    const id =  req.params.id;
+    Forgotpassword.findOne({ where : { id }}).then(forgotpasswordrequest => {
+        if(forgotpasswordrequest){
+            forgotpasswordrequest.update({ active: false});
+            res.status(200).send(`<html>
+                                    <script>
+                                        function formsubmitted(e){
+                                            e.preventDefault();
+                                            console.log('called')
+                                        }
+                                    </script> 
+
+                                    <form action="/password/updatepassword/${id}" method="get">
+                                        <label for="newpassword">Enter New password</label>
+                                        <input name="newpassword" type="password" required></input>
+                                        <button>reset password</button>
+                                    </form>
+                                </html>`
+                                )
+            res.end()
+
+        }
+    })
+}
+const updatepassword = (req, res) => {
+
+    try {
+        const { newpassword } = req.query;
+        const { resetpasswordid } = req.params;
+        Forgotpassword.findOne({ where : { id: resetpasswordid }}).then(resetpasswordrequest => {
+
+            //which requested user created Fotrgotpassword db Table,whose userId is here referred
+            //when particular user with email approaches for forgot password,then from required email 
+            //we find that particular user's id from User db table,and updated password will be stored User table under that particular user's id 
+            User.findOne({where: { id : resetpasswordrequest.userId}}).then(user => {
+                // console.log('userDetails', user)
+                if(user) {
+                    //encrypt the password
+
+                    const saltRounds = 10;
+                    bcrypt.genSalt(saltRounds, function(err, salt) {
+                        if(err){
+                            console.log(err);
+                            throw new Error(err);
+                        }
+                        bcrypt.hash(newpassword, salt, function(err, hash) {
+                            // Store hash in your password DB.
+                            if(err){
+                                console.log(err);
+                                throw new Error(err);
+                            }
+                            user.update({ password: hash }).then(() => {
+                                res.status(201).json({message: 'Successfuly update the new password'})
+                            })
+                        });
+                    });
+            } else{
+                return res.status(404).json({ error: 'No user Exists', success: false})
+            }
+            })
+        })
+    } catch(error){
+        return res.status(403).json({ error, success: false } )
+    }
+
+}
+
+
+module.exports = {
+    forgotpassword,
+    updatepassword,
+    resetpassword
+}
+
+
+      
